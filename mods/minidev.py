@@ -1,0 +1,432 @@
+import os
+import json
+import urllib.request
+import re
+from html.parser import HTMLParser
+import eel
+
+# ==========================================
+# --- 迷你世界 API 挂载解析核心引擎 ---
+# ==========================================
+
+class MiniWikiParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.in_table = False
+        self.current_row = []
+        self.current_cell = ""
+        self.rows = []
+        self.is_api_table = False
+        self.api_table_rows = []
+        
+    def handle_starttag(self, tag, attrs):
+        if tag == "table":
+            self.in_table = True
+            self.rows = []
+            self.is_api_table = False
+        elif tag == "tr" and self.in_table:
+            self.current_row = []
+        elif tag in ["td", "th"] and self.in_table:
+            self.current_cell = ""
+            
+    def handle_data(self, data):
+        if self.in_table:
+            self.current_cell += data
+            
+    def handle_endtag(self, tag):
+        if tag == "table":
+            self.in_table = False
+            if self.is_api_table and self.rows:
+                self.api_table_rows.extend(self.rows)
+        elif tag == "tr" and self.in_table:
+            if self.current_row:
+                row_str = " ".join(self.current_row)
+                if "函数名" in row_str or "函数描述" in row_str:
+                    self.is_api_table = True
+                else:
+                    self.rows.append([cell.strip() for cell in self.current_row])
+            self.current_row = []
+        elif tag in ["td", "th"] and self.in_table:
+            self.current_row.append(self.current_cell.strip())
+            self.current_cell = ""
+
+def clean_html_to_text(html):
+    html = re.sub(r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>', '', html, flags=re.IGNORECASE)
+    html = re.sub(r'<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>', '', html, flags=re.IGNORECASE)
+    html = re.sub(r'</?(?:p|div|h1|h2|h3|h4|h5|h6|li|tr|thead|tbody|table|ul|ol)[^>]*>', '\n', html, flags=re.IGNORECASE)
+    html = re.sub(r'<br\s*/?>', '\n', html, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', html)
+    import html as html_lib
+    text = html_lib.unescape(text)
+    return re.sub(r'\n\s*\n+', '\n\n', text)
+
+def extract_func_details(clean_text, func_names):
+    details = {}
+    for name in func_names:
+        escaped_name = re.escape(name)
+        pattern = rf'(?:^|\n)\s*{escaped_name}\s*(?:\n|$)'
+        match = re.search(pattern, clean_text)
+        if not match:
+            pattern = rf'(?:^|\n)\s*{escaped_name}'
+            match = re.search(pattern, clean_text)
+            
+        if match:
+            start_idx = match.end()
+            end_idx = len(clean_text)
+            for next_name in func_names:
+                if next_name == name:
+                    continue
+                next_pattern = rf'(?:^|\n)\s*{re.escape(next_name)}\s*(?:\n|$)'
+                next_match = re.search(next_pattern, clean_text[start_idx:])
+                if next_match:
+                    end_idx = min(end_idx, start_idx + next_match.start())
+            
+            section_text = clean_text[start_idx:end_idx]
+            params = []
+            returns = []
+            
+            param_match = re.search(r'参数及类型\s*[:：]\s*\n*(.*?)(?=\n\s*(?:返回值及类型|该方法的其他说明|具体使用案例|其它说明|参数及类型)\s*[:：]?|$)', section_text, re.DOTALL | re.IGNORECASE)
+            if param_match:
+                param_block = param_match.group(1)
+                param_lines = re.split(r'[;\n；]', param_block)
+                for line in param_lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    m = re.match(r'^([a-zA-Z0-9_]+)\s*[:：]\s*([a-zA-Z0-9_]+)(.*)', line)
+                    if m:
+                        params.append({
+                            "name": m.group(1),
+                            "type": m.group(2),
+                            "desc": m.group(3).strip()
+                        })
+                        
+            return_match = re.search(r'返回值及类型\s*[:：]\s*\n*(.*?)(?=\n\s*(?:参数及类型|该方法的其他说明|具体使用案例|其它说明)\s*[:：]?|$)', section_text, re.DOTALL | re.IGNORECASE)
+            if return_match:
+                return_block = return_match.group(1)
+                return_lines = re.split(r'[;\n；]', return_block)
+                for line in return_lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    m = re.match(r'^([a-zA-Z0-9_]+)\s*[:：]\s*([a-zA-Z0-9_]+)(.*)', line)
+                    if m:
+                        returns.append({
+                            "name": m.group(1),
+                            "type": m.group(2),
+                            "desc": m.group(3).strip()
+                        })
+            
+            details[name] = {"params": params, "returns": returns}
+    return details
+
+def parse_wiki_page(url):
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            html = response.read().decode('utf-8')
+            
+        class_name = None
+        
+        # 1. 优先定位页面内 H1, H2, H3 标签，使冒号匹配可选化（[:：]?），从而匹配无冒号连写标题
+        headings = re.findall(r'<h[123][^>]*>(.*?)</h[123]>', html, re.DOTALL | re.IGNORECASE)
+        for h in headings:
+            clean_h = re.sub(r'<[^>]+>', '', h).strip()
+            if "接口" in clean_h or "列表" in clean_h or "规则" in clean_h:
+                m = re.search(r'(?:接口|列表|规则)\s*[:：]?\s*([a-zA-Z0-9_]+)', clean_h)
+                if m:
+                    class_name = m.group(1)
+                    break
+                    
+        # 2. 次优先寻找含有 title 类的 div / span 标签
+        if not class_name:
+            title_tags = re.findall(r'<(?:div|span|p)[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)</(?:div|span|p)>', html, re.DOTALL | re.IGNORECASE)
+            for t in title_tags:
+                clean_t = re.sub(r'<[^>]+>', '', t).strip()
+                if "接口" in clean_t or "列表" in clean_t or "规则" in clean_t:
+                    m = re.search(r'(?:接口|列表|规则)\s*[:：]?\s*([a-zA-Z0-9_]+)', clean_t)
+                    if m:
+                        class_name = m.group(1)
+                        break
+                        
+        # 3. 再次在 Title 标签中解析
+        if not class_name:
+            title_match = re.search(r'<title>(.*?)</title>', html)
+            if title_match:
+                title_text = title_match.group(1)
+                if "接口" in title_text or "列表" in title_text or "规则" in title_text:
+                    m = re.search(r'(?:接口|列表|规则)\s*[:：]?\s*([a-zA-Z0-9_]+)', title_text)
+                    if m:
+                        class_name = m.group(1)
+                        
+        # 4. 兜底解析
+        if not class_name:
+            class_name = f"Wiki_{url.split('/')[-1]}"
+            
+        parser = MiniWikiParser()
+        parser.feed(html)
+        
+        apis = {}
+        func_names = []
+        for row in parser.api_table_rows:
+            if len(row) >= 3:
+                idx, name, desc = row[0], row[1], row[2]
+                clean_name = re.sub(r'\(.*\)', '', name).strip()
+                if clean_name and not clean_name.isdigit():
+                    apis[clean_name] = {"desc": desc, "params": [], "returns": []}
+                    func_names.append(clean_name)
+                    
+        clean_text = clean_html_to_text(html)
+        details = extract_func_details(clean_text, func_names)
+        
+        for name, detail in details.items():
+            if name in apis:
+                apis[name]["params"] = detail["params"]
+                apis[name]["returns"] = detail["returns"]
+                
+        return class_name, apis
+    except Exception as e:
+        print(f"[Mod: MiniDev Error] 无法解析 URL {url}: {e}")
+        return None, None
+
+def find_auto_mount_urls(entry_url):
+    try:
+        req = urllib.request.Request(entry_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            html = response.read().decode('utf-8')
+        
+        matches = re.findall(r'["\']?_id["\']?\s*:\s*["\']([a-f0-9]{24})["\'].*?["\']?title["\']?\s*:\s*["\']([^"\']+)["\']', html, re.DOTALL)
+        
+        auto_urls = []
+        for doc_id, title in matches:
+            if "：" in title or ":" in title:
+                if re.search(r'[a-zA-Z0-9_]+$', title):
+                    full_url = f"https://dev-wiki.mini1.cn/wiki/{doc_id}"
+                    auto_urls.append((title, full_url))
+        return auto_urls
+    except Exception as e:
+        print(f"[Mod: MiniDev Error] 自动寻找链接失败: {e}")
+        return []
+
+class MinidevModManager:
+    def __init__(self, data_path="mods/minidev_data.json"):
+        self.data_path = data_path
+        self.data = {"mounted_urls": [], "classes": {}}
+        self.load()
+        
+    def load(self):
+        if os.path.exists(self.data_path):
+            try:
+                with open(self.data_path, "r", encoding="utf-8") as f:
+                    self.data = json.load(f)
+                self.heal_corrupted_cache()
+            except Exception as e:
+                print(f"[Mod: MiniDev] 数据读取异常: {e}")
+                
+    def heal_corrupted_cache(self):
+        healed = False
+        classes_data = self.data.get("classes", {})
+        for cls_name, cls_info in classes_data.items():
+            apis = cls_info.get("apis", {})
+            for api_name, api_info in apis.items():
+                params = api_info.get("params", [])
+                clean_params = []
+                for p in params:
+                    name = p.get("name", "")
+                    if re.match(r'^[a-zA-Z0-9_]+$', name):
+                        clean_params.append(p)
+                    else:
+                        healed = True
+                api_info["params"] = clean_params
+                
+                returns = api_info.get("returns", [])
+                clean_returns = []
+                for r in returns:
+                    name = r.get("name", "")
+                    if re.match(r'^[a-zA-Z0-9_]+$', name):
+                        clean_returns.append(r)
+                    else:
+                        healed = True
+                api_info["returns"] = clean_returns
+        if healed:
+            print("[Mod: MiniDev Self-Heal] 已自动检测并自愈本地缓存中的非规范中英混合变量")
+            self.save()
+                
+    def save(self):
+        try:
+            os.makedirs(os.path.dirname(self.data_path), exist_ok=True)
+            with open(self.data_path, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"[Mod: MiniDev] 数据存储异常: {e}")
+            
+    def mount(self, url):
+        url = url.strip()
+        class_name, apis = parse_wiki_page(url)
+        if not class_name or not apis:
+            return {"success": False, "message": f"文档挂载解析失败"}
+            
+        if url not in self.data["mounted_urls"]:
+            self.data["mounted_urls"].append(url)
+            
+        for old_name, old_data in list(self.data["classes"].items()):
+            if old_data.get("url") == url and old_name != class_name:
+                del self.data["classes"][old_name]
+                
+        self.data["classes"][class_name] = {"url": url, "apis": apis}
+        self.save()
+        return {"success": True, "message": f"成功挂载并更新类: {class_name}"}
+        
+    def unmount(self, url):
+        url = url.strip()
+        if url not in self.data["mounted_urls"]:
+            return {"success": False, "message": f"该 URL 未挂载"}
+            
+        self.data["mounted_urls"].remove(url)
+        removed = []
+        for name, cls_data in list(self.data["classes"].items()):
+            if cls_data.get("url") == url:
+                del self.data["classes"][name]
+                removed.append(name)
+        self.save()
+        return {"success": True, "message": f"已成功解绑 URL。已移除: {', '.join(removed)}"}
+        
+    def mount_auto(self, entry_url="https://dev-wiki.mini1.cn/wiki/673b36153ffc6baf0859d348"):
+        auto_urls = find_auto_mount_urls(entry_url)
+        if not auto_urls:
+            return {"success": False, "message": "未扫描到符合条件的接口文档", "mounted_names": []}
+            
+        success_count = 0
+        mounted_names = []
+        total = len(auto_urls)
+        for i, (title, url) in enumerate(auto_urls):
+            try:
+                eel.print_terminal_from_py(f"[Mod: MiniDev] 正在自动挂载 ({i+1}/{total}): {title} ...")
+            except:
+                pass
+            res = self.mount(url)
+            if res["success"]:
+                success_count += 1
+                mounted_names.append(title)
+                
+        try:
+            eel.print_terminal_from_py(f"[Mod: MiniDev] 自动挂载完毕！新增了 {success_count} 个接口文档。")
+        except:
+            pass
+            
+        return {
+            "success": True,
+            "message": f"自动挂载完成。新增挂载了 {success_count} 个接口文档。",
+            "mounted_names": mounted_names
+        }
+        
+    def mount_list(self):
+        count = len(self.data["classes"])
+        try:
+            eel.print_terminal_from_py(f"[Mod: MiniDev] 当前共挂载了 {count} 个类:")
+            for cls_name, info in self.data["classes"].items():
+                eel.print_terminal_from_py(f" - {cls_name}: {info['url']}")
+        except:
+            pass
+        return {"success": True, "count": count}
+        
+    def reclass(self, old_name, new_name):
+        if old_name not in self.data["classes"]:
+            return {"success": False, "message": f"未找到类: {old_name}"}
+        if new_name in self.data["classes"]:
+            return {"success": False, "message": f"目标类名已存在: {new_name}"}
+        self.data["classes"][new_name] = self.data["classes"].pop(old_name)
+        self.save()
+        return {"success": True, "message": f"类名已从 {old_name} 修改为 {new_name}"}
+        
+    def reurl(self, class_name, new_url):
+        if class_name not in self.data["classes"]:
+            return {"success": False, "message": f"未找到类: {class_name}"}
+        old_url = self.data["classes"][class_name]["url"]
+        self.data["classes"][class_name]["url"] = new_url
+        if old_url in self.data["mounted_urls"]:
+            self.data["mounted_urls"].remove(old_url)
+        if new_url not in self.data["mounted_urls"]:
+            self.data["mounted_urls"].append(new_url)
+        self.save()
+        return {"success": True, "message": f"类 {class_name} 的 URL 已更新"}
+        
+    def list_apis(self, class_name, flag=None):
+        found_class = None
+        for name in self.data["classes"]:
+            if name.lower() == class_name.lower():
+                found_class = name
+                break
+        if not found_class:
+            return {"success": False, "message": f"未找到已挂载的类 '{class_name}'", "apis": []}
+            
+        cls_data = self.data["classes"][found_class]
+        apis = cls_data.get("apis", {})
+        lines = []
+        for api_name, api_info in apis.items():
+            if flag == "-p":
+                params_str = ", ".join([p["name"] for p in api_info["params"]])
+                returns_str = ", ".join([r["name"] for r in api_info["returns"]])
+                if returns_str:
+                    lines.append(f"local {returns_str} = {found_class}:{api_name}({params_str})")
+                else:
+                    lines.append(f"{found_class}:{api_name}({params_str})")
+            else:
+                lines.append(f"{found_class}:{api_name}")
+        return {"success": True, "apis": lines}
+
+manager = MinidevModManager()
+
+def setup(app_module):
+    print("[Mod: MiniDev] 正在装载后端模块...")
+
+    @eel.expose
+    def query_my_custom_mod_config():
+        return {"mod_status": "active", "version": "1.0.0"}
+
+    @eel.expose
+    def minidev_mount(url):
+        return manager.mount(url)
+
+    @eel.expose
+    def minidev_unmount(url):
+        return manager.unmount(url)
+
+    @eel.expose
+    def minidev_mount_auto(url=None):
+        if url:
+            return manager.mount_auto(url)
+        return manager.mount_auto()
+
+    @eel.expose
+    def minidev_list(class_name, flag=None):
+        return manager.list_apis(class_name, flag)
+
+    @eel.expose
+    def minidev_get_all_apis():
+        return manager.data
+
+    @eel.expose
+    def minidev_mountlist():
+        return manager.mount_list()
+
+    @eel.expose
+    def minidev_reclass(old_name, new_name):
+        return manager.reclass(old_name, new_name)
+
+    @eel.expose
+    def minidev_reurl(class_name, new_url):
+        return manager.reurl(class_name, new_url)
+
+    # ==========================================
+    # --- 后端模组劫持与扩展 (Monkey Patching) ---
+    # ==========================================
+    original_run_lua = app_module.run_lua_script
+
+    def modded_run_lua_script(rel_path):
+        print(f"[后端模组拦截] 运行 Lua 文件前拦截。目标文件: {rel_path}")
+        return original_run_lua(rel_path)
+
+    # 热替换
+    app_module.run_lua_script = modded_run_lua_script
+    print("[Mod: MiniDev] 后端模块装载完成！")

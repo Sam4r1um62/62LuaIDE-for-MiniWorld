@@ -1,0 +1,184 @@
+/**
+ * =================================================================
+ * SMWE 统一插件样式文件
+ * GM2H Developer Mode - Refactored Version
+ * 
+ * 此文件包含 DataPlus, Directory Switcher, 和 DPS Rank 插件的样式。
+ * 它将被 script.js 动态加载，以保持 HTML 文件的纯净。
+ * =================================================================
+ */
+
+/* =================================================================
+ * Plugin: DataPlus
+ * ================================================================= */
+
+/* --- 功能一：Tooltip 样式 --- */
+#dp-tooltip { position: fixed; z-index: 10000; background-color: var(--modal-bg, rgba(248, 249, 250, 0.85)); backdrop-filter: blur(10px) saturate(180%); -webkit-backdrop-filter: blur(10px) saturate(180%); border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1)); border-radius: 8px; padding: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); font-size: 12px; max-width: 300px; pointer-events: none; opacity: 0; transform: scale(0.95); transition: opacity 0.15s ease, transform 0.15s ease; white-space: pre-wrap; word-break: break-word; }
+#dp-tooltip.visible { opacity: 1; transform: scale(1); }
+#dp-tooltip h4 { margin: 0 0 8px 0; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
+#dp-tooltip .dp-prop { display: flex; justify-content: space-between; margin-bottom: 4px; }
+#dp-tooltip .dp-prop-name { color: var(--text-muted, #666); padding-right: 15px; }
+#dp-tooltip .dp-prop-value { font-weight: 500; }
+#dp-tooltip .dp-prop-value.dps { color: #dc3545; font-weight: bold; }
+#dp-tooltip .dp-describe { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--border-color); color: #555; font-style: italic; }
+
+/* --- 功能二：对比窗口 --- */
+#dp-compare-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.1); backdrop-filter: blur(5px); z-index: 1999; display: flex; justify-content: center; align-items: center; }
+#dp-compare-window { background-color: var(--modal-bg, rgba(248, 249, 250, 0.9)); border: 1px solid var(--border-color, rgba(0, 0, 0, 0.2)); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); min-width: 600px; min-height: 400px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; resize: both; overflow: hidden; }
+#dp-compare-header { padding: 10px 15px; background-color: rgba(0,0,0,0.05); border-bottom: 1px solid var(--border-color); cursor: move; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+#dp-compare-header h3 { font-size: 14px; margin: 0; }
+#dp-compare-controls button { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
+#dp-compare-content { flex-grow: 1; overflow: auto; }
+#dp-compare-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#dp-compare-table th, #dp-compare-table td { padding: 8px; border: 1px solid var(--border-color); text-align: left; white-space: nowrap; }
+#dp-compare-table thead th { background-color: rgba(0,0,0,0.05); position: sticky; top: 0; z-index: 1; }
+#dp-compare-table tbody th { position: sticky; left: 0; background-color: rgba(240, 240, 240, 0.9); font-weight: 500; }
+
+/* --- 颜色阶梯 --- */
+.dp-color-0 { color: #343a40; } /* 黑色 */
+.dp-color-1 { color: #198754; } /* 墨绿 */
+.dp-color-2 { color: #20c997; } /* 大绿 */
+.dp-color-3 { color: #0d6efd; } /* 深蓝 */
+.dp-color-4 { color: #6f42c1; } /* 大紫 */
+.dp-color-5 { color: #ffc107; } /* 中黄 */
+.dp-color-6 { color: #fd7e14; } /* 橘色 */
+.dp-color-7 { color: #dc3545; } /* 大红 */
+.dp-color-text { font-weight: bold; }
+
+/* --- 自定义右键菜单 --- */
+#dp-context-menu { position: fixed; z-index: 10001; background: var(--modal-bg); border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 5px 0; display: none; }
+#dp-context-menu ul { list-style: none; margin: 0; padding: 0; }
+#dp-context-menu li { padding: 8px 15px; cursor: pointer; }
+#dp-context-menu li:hover { background-color: var(--highlight-bg); }
+
+/* =================================================================
+ * Plugin: Directory Switcher
+ * ================================================================= */
+
+/* 插件的总容器 */
+#directory-switcher-container { padding: 8px; border-bottom: 1px solid var(--border-color); }
+/* 顶部按钮行 (用于放置“映射”按钮等) */
+#ds-top-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+/* 目录切换按钮组 */
+#ds-dir-switcher { display: flex; gap: 6px; }
+.dir-switcher-btn { flex-grow: 1; padding: 5px 8px; font-size: 12px; background-color: rgba(128, 128, 128, 0.1); border: 1px solid transparent; }
+.dir-switcher-btn.active { background-color: var(--highlight-active-bg) !important; color: white !important; border-color: rgba(0,0,0,0.4); font-weight: 600; }
+/* 模态框样式 */
+#id-map-modal .modal-content { width: 90%; max-width: 700px; height: 80vh; }
+#id-map-table-container { height: 100%; overflow-y: auto; }
+#id-map-table { width: 100%; border-collapse: collapse; }
+#id-map-table th, #id-map-table td { border: 1px solid var(--border-color); padding: 8px; text-align: left; }
+#id-map-table th { background-color: rgba(0,0,0,0.05); position: sticky; top: 0; }
+#id-map-table input { width: 100%; border: 1px solid var(--border-color); padding: 6px; border-radius: 4px; }
+#id-map-search { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid var(--border-color); }
+
+/* =================================================================
+ * Plugin: DPS Rank
+ * ================================================================= */
+
+#dps-rank-window-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.1); backdrop-filter: blur(5px); z-index: 1998; display: flex; justify-content: center; align-items: center; }
+#dps-rank-window { background-color: var(--modal-bg, rgba(248, 249, 250, 0.9)); border: 1px solid var(--border-color, rgba(0, 0, 0, 0.2)); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: 800px; height: 600px; min-width: 500px; min-height: 300px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; resize: both; overflow: hidden; }
+#dps-rank-header { padding: 10px 15px; background-color: rgba(0,0,0,0.05); border-bottom: 1px solid var(--border-color); cursor: move; user-select: none; display: flex; justify-content: space-between; align-items: center; }
+#dps-rank-header h3 { font-size: 14px; margin: 0; }
+#dps-rank-controls button { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); padding: 0 5px; }
+#dps-rank-content { flex-grow: 1; overflow: auto; padding: 10px; }
+#dps-rank-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#dps-rank-table th, #dps-rank-table td { padding: 10px; border-bottom: 1px solid var(--border-color); text-align: left; }
+#dps-rank-table thead th { background-color: rgba(0,0,0,0.05); position: sticky; top: 0; cursor: pointer; }
+#dps-rank-table thead th:hover { background-color: rgba(0,0,0,0.1); }
+#dps-rank-table tbody tr { cursor: pointer; transition: background-color 0.15s ease; }
+#dps-rank-table tbody tr:hover { background-color: var(--highlight-bg); }
+#dps-rank-table .col-rank, #dps-rank-table .col-dps { font-weight: bold; }
+#dps-rank-table .col-dps { color: #dc3545; }
+#dps-rank-status { padding: 20px; text-align: center; color: var(--text-muted); }
+
+
+
+/* plugin.css (添加以下内容) */
+
+/* =================================================================
+ * Plugin: Sidecar
+ * ================================================================= */
+
+#sidecar-container {
+    margin-top: 20px;
+    padding: 15px;
+    border: 1px dashed var(--border-color);
+    border-radius: 8px;
+    background-color: rgba(128, 128, 128, 0.05);
+}
+
+#sidecar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+#sidecar-header h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+#sidecar-controls button {
+    margin-left: 8px;
+}
+
+#sidecar-path-display {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    background-color: rgba(0,0,0,0.05);
+    padding: 5px 8px;
+    border-radius: 4px;
+    word-break: break-all;
+    cursor: pointer;
+}
+#sidecar-path-display:hover {
+    background-color: rgba(0,0,0,0.1);
+}
+
+#sidecar-content {
+    margin-top: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+#sidecar-content .placeholder {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+#sidecar-content .form-group {
+    grid-template-columns: 180px 1fr;
+    background-color: rgba(255, 251, 235, 0.5); /* 淡黄色背景以区分 */
+    border-left: 3px solid #ffc107; /* 黄色左边框 */
+    padding: 5px;
+    margin-bottom: 2px;
+    border-radius: 4px;
+}
+
+#sidecar-content textarea {
+    width: 100%;
+    min-height: 150px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+/* 与 DataPlus 对比功能的联动样式 */
+#dp-compare-table tr.sidecar-prop th,
+#dp-compare-table tr.sidecar-prop td {
+    background-color: rgba(255, 251, 235, 0.7) !important; /* 附属属性行高亮 */
+    font-style: italic;
+    color: #5c533a;
+}
+
+#dp-compare-table tr.sidecar-prop th::before {
+    content: '★ '; /* 添加星号标识 */
+    color: #ffc107;
+    font-style: normal;
+}

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lua Studio IDE</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css"> 
+    <script type="text/javascript" src="/eel.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+</head>
+<body>
+    <div id="app-background"></div>
+    <div class="container">
+        <!-- 左侧栏：文件系统 -->
+        <aside class="sidebar">
+            <header class="sidebar-header">
+                <div class="header-top">
+                    <h1>文件系统</h1>
+                    <div class="header-buttons">
+                        <button id="settings-toggle-button" class="btn btn-sm">设置</button>
+                    </div>
+                </div>
+            </header>
+            <div id="file-tree-container" class="file-tree-container"></div>
+        </aside>
+        
+        <!-- 中间栏：代码编辑器与终端 -->
+        <main class="content-area">
+            <div id="welcome-screen">
+                <div class="welcome-content">
+                    <h2>Lua Studio</h2>
+                    <p>等待唤醒...</p>
+                </div>
+            </div>
+            
+            <div id="editor-screen" class="hidden">
+                <header class="editor-header">
+                    <h2 id="item-name-display"></h2>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="run-button" class="btn btn-run">运行</button>
+                        <button id="save-button" class="btn btn-primary">保存</button>
+                    </div>
+                </header>
+                <div id="editor-container"></div>
+                
+                <div id="terminal-container">
+                    <div class="terminal-header">输出控制台</div>
+                    <pre id="terminal-output"></pre>
+                </div>
+            </div>
+        </main>
+
+        <!-- 右侧栏：浏览器、音乐与插件方阵 -->
+        <aside class="right-sidebar">
+            <header class="right-sidebar-header">
+                <button id="tab-browser" class="tab-btn active">小浏览器</button>
+                <button id="tab-music" class="tab-btn">网易云</button>
+                <button id="tab-plugins" class="tab-btn">插件方阵</button>
+            </header>
+            <div class="right-sidebar-content">
+                <!-- 浏览器面板 -->
+                <div id="panel-browser" class="panel-content">
+                    <div class="browser-controls">
+                        <input type="text" id="browser-url" placeholder="网址或搜索关键词..." autocomplete="off">
+                        <button id="browser-go" class="btn btn-sm">前往</button>
+                    </div>
+                    <div class="bookmarks-box">
+                        <select id="chrome-bookmarks-select">
+                            <option value="">正在读取 Chrome 书签...</option>
+                        </select>
+                    </div>
+                    <div class="browser-iframe-wrapper">
+                        <iframe id="browser-iframe" src="about:blank"></iframe>
+                        <div id="browser-placeholder" class="iframe-placeholder">
+                            <p>输入网址并在上方点击前往以加载网页。</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 音乐面板 -->
+                <div id="panel-music" class="panel-content hidden">
+                    <div class="music-controls">
+                        <input type="text" id="music-id" placeholder="单曲或歌单 ID..." autocomplete="off">
+                        <select id="music-type">
+                            <option value="2">单曲</option>
+                            <option value="0">歌单</option>
+                            <option value="1">专辑</option>
+                        </select>
+                        <button id="music-play" class="btn btn-sm">播放</button>
+                    </div>
+                    <div id="music-player-container">
+                        <iframe id="music-iframe" frameborder="no" border="0" marginwidth="0" marginheight="0" width="100%" height="110" src="about:blank"></iframe>
+                        <div id="music-placeholder" class="iframe-placeholder">
+                            <p>输入单曲/歌单 ID 并点击播放进行加载。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 插件方阵面板 -->
+                <div id="panel-plugins" class="panel-content hidden" style="overflow-y: auto;">
+                    <div id="plugin-matrix-grid" class="plugin-matrix-grid"></div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Vim 式指令栏 -->
+    <div id="vim-cmd-line">
+        <span class="cmd-prompt">:</span>
+        <input type="text" id="cmd-input" placeholder="输入指令按 Enter 执行" autocomplete="off">
+    </div>
+
+    <!-- IDE 端仅保留 5 秒的首次切游戏窗口倒计时遮罩 -->
+    <div id="screenshot-overlay" class="hidden">
+        <div id="countdown-timer">5</div>
+    </div>
+
+    <!-- Ctrl+I 插件检索弹出面板 -->
+    <div id="search-modal" class="modal-overlay hidden">
+        <div class="modal-content search-modal-content">
+            <div class="modal-header">
+                <h2>插件极速插入 (Ctrl+I)</h2>
+                <button class="modal-close-btn" data-target="search-modal">关闭</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="search-plugin-input" placeholder="输入名称或 ID 进行搜寻..." autocomplete="off">
+                <ul id="search-results-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置面板 -->
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>系统设置</h2>
+                <button class="modal-close-btn" data-target="settings-modal">关闭</button>
+            </div>
+            <div class="modal-body">
+                <form id="settings-form">
+                    <div class="form-group">
+                        <label>工作区目录</label>
+                        <input type="text" id="settings-data-path">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                 <button id="settings-save-button" class="btn btn-primary">应用</button>
+            </div>
+        </div>
+    </div>
+    <div id="toast-container"></div>
+    <script src="js/script.js"></script>
+<script src="mods/loader.js"></script>
+<script src="mods/minidev.js"></script>
+</body>
+</html>
