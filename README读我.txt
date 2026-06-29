@@ -5,7 +5,7 @@
 然后，请在app.py中搜索MINI_WORLD_BEHAVIOR_DIR，把它的值改成你地图的插件的路径
 
 接着，你需要：
-Ctrl+R
+Win+R
 
 输入cmd
 
