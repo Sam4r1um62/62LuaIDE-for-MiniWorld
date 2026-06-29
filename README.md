@@ -12,12 +12,12 @@ AI做的神秘LuaIDE，为迷你世界开发了一些功能。
 
 ### 指令
 
-new [file/dir]
-del [file]
-re [file] [name] 其实可以用来复制和移动什么的
-back [file]
-aback [file] [0/1] 自动备份
-tab [block/file] 自动TAB
-minidev_help 获得帮助
+- new [file/dir]
+- del [file]
+- re [file] [name] 其实可以用来复制和移动什么的
+- back [file]
+- aback [file] [0/1] 自动备份
+- tab [block/file] 自动TAB
+- minidev_help 获得帮助
 
 不建议食用makelua指令
